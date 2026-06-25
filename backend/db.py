@@ -699,26 +699,32 @@ def load_work_orders_from_sql(stage: str | None = None) -> list[dict]:
     Query work_orders (LEFT JOIN asset_master for criticality/area) and return
     raw SQL dicts.  Stage filter is applied in SQL — no further Python filtering needed.
 
+    The effective stage is COALESCE(NULLIF(wo.stage, 'Unmapped'), am.stage, wo.stage)
+    so records whose stage was stored as 'Unmapped' at import time are resolved from
+    the asset_master join instead.
+
     Caller is responsible for converting rows to enriched Python dicts
     (see downtime_service._sql_row_to_enriched).
     """
+    # Resolve stage at query time: use asset_master stage as fallback when the
+    # stored stage is 'Unmapped' (happens when asset mapping ran after import).
+    _eff_stage = "COALESCE(NULLIF(wo.stage, 'Unmapped'), am.stage, wo.stage)"
+
     params: list = []
     where_parts: list[str] = []
 
-    if stage in ("Stage 1", "Stage 2"):
-        where_parts.append("wo.stage = ?")
+    if stage:
+        where_parts.append(f"({_eff_stage}) = ?")
         params.append(stage)
-    elif stage in ("Unmapped", "Missing Asset ID", "Needs Stage Review"):
-        where_parts.append("wo.stage = ?")
-        params.append(stage)
-    # stage == "" or None → no filter (all stages)
 
     where_sql = ("WHERE " + " AND ".join(where_parts)) if where_parts else ""
 
     sql = f"""
         SELECT
             wo.mr_number, wo.wo_number, wo.asset_id, wo.asset_name,
-            wo.functional_location, wo.stage, wo.category, wo.machine_group,
+            wo.functional_location,
+            {_eff_stage} AS stage,
+            wo.category, wo.machine_group,
             wo.severity, wo.status, wo.description, wo.translated_description,
             wo.job_type, wo.trade,
             wo.actual_start, wo.actual_end, wo.created_date,
