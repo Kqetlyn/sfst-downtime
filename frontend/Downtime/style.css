@@ -2457,9 +2457,7 @@ canvas {
 .machine-detail-panel .machine-history-wrapper th:nth-child(2),
 .machine-detail-panel .machine-history-wrapper td:nth-child(2) { min-width: 80px; }    /* WO */
 .machine-detail-panel .machine-history-wrapper th:nth-child(3),
-.machine-detail-panel .machine-history-wrapper td:nth-child(3) { min-width: 70px; }    /* Match */
-.machine-detail-panel .machine-history-wrapper th:nth-child(4),
-.machine-detail-panel .machine-history-wrapper td:nth-child(4) { min-width: 76px; }    /* Status */
+.machine-detail-panel .machine-history-wrapper td:nth-child(3) { min-width: 76px; }    /* Status */
 .machine-detail-panel .machine-history-wrapper th:nth-child(5),
 .machine-detail-panel .machine-history-wrapper td:nth-child(5) { min-width: 60px; }    /* Service Level */
 .machine-detail-panel .machine-history-wrapper th:nth-child(6),

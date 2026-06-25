@@ -6567,21 +6567,6 @@ function compareMachineHistoryRows(a, b) {
     return compareLatestMrDateDesc(a, b);
 }
 
-function renderMatchCell(row) {
-    const sm = row.smartMatch;
-    if (!sm) return `<td class="match-cell"><span class="match-na">--</span></td>`;
-    const conf = String(sm.confidence || "").toLowerCase();
-    const mismatch = sm.possibleAssetCodingMismatch
-        ? `<span class="match-flag" title="The record's own Asset ID differs from the matched asset — possible asset coding mismatch.">Possible asset coding mismatch</span>`
-        : "";
-    return `
-        <td class="match-cell">
-            <span class="match-source">${escapeHtml(sm.matchSource || "")}</span>
-            <span class="match-conf match-conf-${escapeHtml(conf)}">${escapeHtml(sm.confidence || "")}</span>
-            ${mismatch}
-        </td>`;
-}
-
 function renderMachineHistoryRow(row, index) {
     const raised = getMrRaisedDate(row).date;
     const actualStart = parseDateValue(row.actual_start_time || row.maintenance_start_time);
@@ -6592,7 +6577,6 @@ function renderMachineHistoryRow(row, index) {
         <tr>
             <td>${escapeHtml(getMrRequestId(row, index) || "--")}</td>
             <td>${escapeHtml(getMrWorkOrderOnlyId(row) || "--")}</td>
-            ${renderMatchCell(row)}
             <td>${renderBadgeCell("status", getMrStatus(row))}</td>
             <td>${renderBadgeCell("service", getMrServiceLevel(row))}</td>
             <td>${renderBadgeCell("wo-type", row.job_trade || row.maintenance_job_type || "")}</td>
@@ -6661,14 +6645,14 @@ function renderMachineExplorerHistory(rows = [], assetRows = []) {
         setText("machine-explorer-helper", `All Assets view includes every WO/MR that matches the current Machine Explorer filters in ${groupLabel}, plus any history filters applied below.`);
         if (!filtered.length) {
             setHistoryEmpty(true);
-            body.innerHTML = `<tr><td colspan="16" class="empty-cell">No WO/MR records match the current filters.</td></tr>`;
+            body.innerHTML = `<tr><td colspan="15" class="empty-cell">No WO/MR records match the current filters.</td></tr>`;
             return;
         }
         setHistoryEmpty(false);
         const shownHistoryRows = filtered.slice(0, MACHINE_HISTORY_RENDER_LIMIT);
         const hiddenCount = Math.max(0, filtered.length - shownHistoryRows.length);
         body.innerHTML = shownHistoryRows.map((row, index) => renderMachineHistoryRow(row, index)).join("") + (hiddenCount
-            ? `<tr><td colspan="16" class="empty-cell">${fmtNumber(hiddenCount)} more WO/MR record${hiddenCount === 1 ? "" : "s"} hidden for performance. Use year, month, date range, or search filters to narrow the list.</td></tr>`
+            ? `<tr><td colspan="15" class="empty-cell">${fmtNumber(hiddenCount)} more WO/MR record${hiddenCount === 1 ? "" : "s"} hidden for performance. Use year, month, date range, or search filters to narrow the list.</td></tr>`
             : "");
         return;
     }
@@ -6682,7 +6666,7 @@ function renderMachineExplorerHistory(rows = [], assetRows = []) {
         setText("machine-explorer-meta", "Select a machine/asset from Step 2. The table stays empty until an asset is selected.");
         setText("machine-explorer-helper", "Selected Asset view includes direct Asset ID records and related records detected from asset name, description, translated description, and functional location.");
         setHistoryEmpty(true);
-        body.innerHTML = `<tr><td colspan="16" class="empty-cell">Select an asset above to view WO/MR history.</td></tr>`;
+        body.innerHTML = `<tr><td colspan="15" class="empty-cell">Select an asset above to view WO/MR history.</td></tr>`;
         return;
     }
 
@@ -6717,13 +6701,13 @@ function renderMachineExplorerHistory(rows = [], assetRows = []) {
             : 'Selected Asset view includes direct Asset ID records and related records detected from asset name, description, translated description, and functional location. Toggle "Include possible related matches" to also show low-confidence matches.'
     );
     if (!filtered.length) {
-        body.innerHTML = `<tr><td colspan="16" class="empty-cell">No WO/MR records match this asset and the current filters.</td></tr>`;
+        body.innerHTML = `<tr><td colspan="15" class="empty-cell">No WO/MR records match this asset and the current filters.</td></tr>`;
         return;
     }
     const shownHistoryRows = filtered.slice(0, MACHINE_HISTORY_RENDER_LIMIT);
     const hiddenCount = Math.max(0, filtered.length - shownHistoryRows.length);
     body.innerHTML = shownHistoryRows.map((row, index) => renderMachineHistoryRow(row, index)).join("") + (hiddenCount
-        ? `<tr><td colspan="16" class="empty-cell">${fmtNumber(hiddenCount)} more WO/MR record${hiddenCount === 1 ? "" : "s"} hidden for performance. Use year, month, date range, or search filters to narrow the list.</td></tr>`
+        ? `<tr><td colspan="15" class="empty-cell">${fmtNumber(hiddenCount)} more WO/MR record${hiddenCount === 1 ? "" : "s"} hidden for performance. Use year, month, date range, or search filters to narrow the list.</td></tr>`
         : "");
 }
 
