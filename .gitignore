@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+*.pyc
+.env
+*.log
+logs/
+*.db
+
+# Data files — kept locally, uploaded via the app on the deployed version
+data/argos_translate/
+data/*.xlsx
+data/*.csv
+data/*.json
+data/*.zip
+data/work_order_imports/
+data/_upload_tmp/
+data/_dashboard_cache/

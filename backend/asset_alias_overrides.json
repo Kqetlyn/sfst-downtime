@@ -1,0 +1,27 @@
+{
+  "_README": "Manual alias overrides for the Smart Asset Resolver (asset_resolver.py). Aliases are AUTO-generated from each asset name first; entries here are MERGED on top for unusual names or shop-floor nicknames. Keys are Asset IDs. Each value may have: aliases [], excludePatterns [], relatedKeywords []. Most assets need NO entry here.",
+  "_EXAMPLE": {
+    "ENPD-240022": {
+      "aliases": ["combi1", "combi 1", "combi oven no1"],
+      "excludePatterns": ["combi 2", "combi oven 2", "combi 10"],
+      "relatedKeywords": []
+    }
+  },
+  "ENPD-240058": {
+    "aliases": [
+      "Dicing Machine",
+      "Dice machine",
+      "Dice",
+      "Robot Coupe",
+      "Robot Coupe CL50",
+      "Robot Coupe CL 50",
+      "Robot Coupe CL-50",
+      "CL50",
+      "CL 50",
+      "CL-50",
+      "Vegetable dicing machine"
+    ],
+    "excludePatterns": [],
+    "relatedKeywords": ["dicing", "dice", "robot coupe", "cl50", "cl 50"]
+  }
+}
