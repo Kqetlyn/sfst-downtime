@@ -17,12 +17,7 @@ from downtime_service import (
 )
 from spare_parts_service import build_project_transactions_payload
 
-try:
-    from mira.api import mira_bp
-except Exception as mira_import_error:
-    mira_bp = None
-else:
-    mira_import_error = None
+mira_bp = None
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FRONTEND_DIR = os.path.abspath(os.path.join(BASE_DIR, "..", "frontend"))
@@ -182,10 +177,6 @@ def apply_cache_headers(response):
     return response
 
 
-if mira_bp is not None:
-    app.register_blueprint(mira_bp)
-else:
-    print(f"MIRA routes unavailable: {mira_import_error}")
 
 
 # ── Health / admin ────────────────────────────────────────────────────────────
@@ -446,11 +437,6 @@ if __name__ == "__main__":
         _free_port(port)
     if os.environ.get("WERKZEUG_RUN_MAIN") or not debug:
         _start_cache_warming()
-        try:
-            import mr_triage_service
-            mr_triage_service.start_scheduler()
-        except Exception as _triage_exc:
-            print(f"MR triage scheduler not started: {_triage_exc}")
 
     if not debug and os.environ.get("USE_WAITRESS", "1").lower() not in {"0", "false", "no"}:
         try:
