@@ -233,6 +233,10 @@ def db_sync_asset_master():
 # ── Frontend routes ───────────────────────────────────────────────────────────
 
 @app.route("/")
+def root():
+    return redirect("/Downtime/index.html")
+
+
 @app.route("/Downtime")
 @app.route("/Downtime/index.html")
 def downtime_root():
