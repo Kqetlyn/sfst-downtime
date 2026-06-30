@@ -178,9 +178,19 @@ const EQUIP_GROUP_TO_CATEGORY = {
     "Unknown / Review": "Unclassified",
 };
 function getRowEquipmentCategory(row) {
-    const c = row && row.equipment_category;
-    if (c) return c;
-    return EQUIP_GROUP_TO_CATEGORY[String((row && row.machine_group) || "").trim()] || "Unclassified";
+    const c = row && (
+        row.equipment_category
+        || row.mappedMainAssetGroup
+        || row.mapped_main_asset_group
+        || row.category
+        || row.asset_category
+    );
+    if (c) {
+        const direct = String(c).trim();
+        return EQUIP_GROUP_TO_CATEGORY[direct] || direct;
+    }
+    const group = String((row && (row.machine_group || row.machine_name || row.machine_name_display)) || "").trim();
+    return EQUIP_GROUP_TO_CATEGORY[group] || "Unclassified";
 }
 function applyCategoryFilter(rows) {
     if (!Array.isArray(rows) || selectedEquipmentCategory === "all") return rows || [];
@@ -8488,7 +8498,8 @@ function buildAssetListLookup() {
             const meta = {
                 asset_name: String(asset.label || "").trim(),
                 machine_name: machine.machine_name,
-                asset_machine_group: String(asset.mappedMachineGroup || "").trim(),
+                asset_machine_group: String(asset.mappedMachineGroup || asset.assetMachineGroup || asset.mappedSubAssetGroup || "").trim(),
+                equipment_category: String(asset.mappedMainAssetGroup || machine.mappedMainAssetGroup || machine.machine_name || "").trim(),
                 criticality: machine.criticality,
                 location: machine.location,
             };
@@ -13372,7 +13383,7 @@ function kdiCritCmpPopulateFyOptions(rows) {
     if (!fySelect || !fy2Select) return;
     const years = new Set();
     (rows || []).forEach((wo) => {
-        const fy = getMrFinancialYearStart(kdiCritCmpWoDate(wo));
+        const fy = getMrFinancialYearStart(kdiCritCmpWoDate(wo) || parseDateValue(wo?.actual_start_time || wo?.maintenance_start_time || wo?.start_time));
         if (fy !== null) years.add(fy);
     });
     // When no row-derived years are found, seed from the MTBF history years list
@@ -13679,7 +13690,8 @@ function updateKdiCritCmpSection(rows) {
         if (summaryEl) summaryEl.innerHTML = "<p class='kdi-crit-loading'>Loading critical asset mapping…</p>";
         return;
     }
-    if (!rows.length && !downtimePayload && !mtbfHistoryPayload) {
+    if (!rows.length && !mtbfHistoryPayload) {
+        requestMtbfHistoryLoad();
         if (summaryEl) summaryEl.innerHTML = "<p class='kdi-crit-loading'>Loading maintenance data…</p>";
         return;
     }

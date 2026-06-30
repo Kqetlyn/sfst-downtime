@@ -1033,17 +1033,41 @@ def build_mtbf_work_order_history_payload(stage=None):
         if start_dt is not None:
             years.add(str(start_dt.year))
             months.add(f"{start_dt.year}-{start_dt.month:02d}")
+        end_dt = parse_iso_datetime(end_time)
+        if end_dt is not None:
+            years.add(str(end_dt.year))
+            months.add(f"{end_dt.year}-{end_dt.month:02d}")
 
         records.append(
             {
                 "asset_id": row.get("asset_id"),
+                "asset_name": row.get("asset_name") or row.get("mapped_asset_name") or row.get("machine_name"),
+                "asset_display_name": row.get("asset_display_name") or row.get("asset_name"),
                 "machine_group": row.get("machine_group") or row.get("machine_name_display") or row.get("machine_name"),
+                "machine_name": row.get("machine_name"),
+                "machine_name_display": row.get("machine_name_display"),
+                "equipment_category": row.get("equipment_category") or row.get("mappedMainAssetGroup"),
+                "mappedMainAssetGroup": row.get("mappedMainAssetGroup") or row.get("mapped_main_asset_group"),
+                "mappedMachineGroup": row.get("mappedMachineGroup") or row.get("asset_machine_group"),
+                "asset_machine_group": row.get("asset_machine_group") or row.get("mappedMachineGroup"),
+                "mappedStage": row.get("mappedStage") or row.get("mapped_stage"),
                 "criticality": row.get("criticality"),
                 "raw_criticality": row.get("raw_criticality"),
+                "status": row.get("status"),
+                "request_state": row.get("request_state") or row.get("status"),
                 "start_time": start_time,
                 "end_time": end_time,
                 "actual_start_time": row.get("actual_start_time"),
                 "actual_end_time": row.get("actual_end_time"),
+                "maintenance_start_time": row.get("maintenance_start_time"),
+                "maintenance_end_time": row.get("maintenance_end_time"),
+                "duration_hours": row.get("duration_hours"),
+                "ttr_hours": row.get("ttr_hours"),
+                "original_ttr_hours": row.get("original_ttr_hours"),
+                "valid_mttr_ttr": row.get("valid_mttr_ttr"),
+                "valid_ttr": row.get("valid_ttr"),
+                "data_quality_flag": row.get("data_quality_flag"),
+                "data_quality_flags": row.get("data_quality_flags"),
                 "work_order_id": row.get("work_order_id"),
             }
         )
