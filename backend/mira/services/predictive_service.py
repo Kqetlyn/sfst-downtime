@@ -1290,9 +1290,9 @@ def _row_issue_text(row: dict) -> str:
 
 def _row_status_bucket(row: dict) -> str:
     status = str(row.get("status") or row.get("mr_status") or row.get("wo_status") or "").lower()
-    if any(token in status for token in ("finish", "finished", "confirm", "confirmed", "complete", "completed", "closed", "ended")):
+    if any(token in status for token in ("finish", "finished", "confirmed", "complete", "completed", "closed", "ended")):
         return "finished"
-    if any(token in status for token in ("open", "progress", "started", "pending", "created", "active", "scheduled")):
+    if any(token in status for token in ("open", "progress", "confirm", "started", "pending", "created", "active", "scheduled")):
         return "open"
     return "other"
 

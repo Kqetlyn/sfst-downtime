@@ -924,7 +924,7 @@ function normalizeClassification(value) {
 }
 
 function isOpenLifecycleState(value) {
-    return ["new", "in progress", "inprogress"].includes(normalizeClassification(value));
+    return ["new", "in progress", "inprogress", "confirm", "rework", "re work"].includes(normalizeClassification(value));
 }
 
 function getTtrHours(row) {
@@ -1143,7 +1143,8 @@ function isMrNewStatus(status) {
 }
 
 function isMrInProgressStatus(status) {
-    return normalizeClassification(status).replace(/\s+/g, "") === "inprogress";
+    const normalized = normalizeClassification(status);
+    return normalized.replace(/\s+/g, "") === "inprogress" || normalized === "confirm" || normalized.replace(/\s+/g, "") === "rework";
 }
 
 function isMrFinishedStatus(status) {
@@ -1151,7 +1152,7 @@ function isMrFinishedStatus(status) {
 }
 
 function isMrReviewStatus(status) {
-    return ["confirm", "rework", "re work", "rejected", "reject"].includes(normalizeClassification(status));
+    return ["rejected", "reject"].includes(normalizeClassification(status));
 }
 
 function isMrRejectedStatus(status) {
@@ -1164,9 +1165,9 @@ function isNormalOpenMrStatus(status) {
 
 function getAcknowledgementStatus(row) {
     const explicit = String(row?.acknowledgement_status || row?.acknowledgment_status || "").trim();
-    if (explicit) return explicit;
     const status = getMrStatus(row);
     const workOrderId = getMrWorkOrderOnlyId(row);
+    if (explicit && !(normalizeClassification(explicit) === "review" && isMrInProgressStatus(status) && workOrderId)) return explicit;
     if (isMrNewStatus(status) && !workOrderId) return "Not Acknowledged";
     if (isMrInProgressStatus(status) && workOrderId) return "Acknowledged / In Progress";
     if (isMrFinishedStatus(status)) return "Closed";
@@ -1177,10 +1178,16 @@ function getDataQualityFlags(row) {
     // A confirmed correction (Data Review) makes the row count as valid for KPIs.
     if (dataReviewCorrectionResolvedFor(row)) return ["Valid"];
     const rawFlags = row?.data_quality_flags;
-    if (Array.isArray(rawFlags) && rawFlags.length) return rawFlags.map((flag) => String(flag || "").trim()).filter(Boolean);
+    const normalizeFlags = (flags) => {
+        const status = getMrStatus(row);
+        const cleaned = flags.map((flag) => String(flag || "").trim()).filter(Boolean);
+        const filtered = isOpenLifecycleState(status) ? cleaned.filter((flag) => flag !== "Review status") : cleaned;
+        return filtered.length ? filtered : ["Valid"];
+    };
+    if (Array.isArray(rawFlags) && rawFlags.length) return normalizeFlags(rawFlags);
     const single = String(row?.data_quality_flag || "").trim();
     if (!single) return ["Valid"];
-    return single.split(";").map((flag) => flag.trim()).filter(Boolean);
+    return normalizeFlags(single.split(";"));
 }
 
 function getDataQualityFlag(row) {
@@ -1719,6 +1726,7 @@ function normalizeMrTrackingRows(rows = []) {
             hasSeverityField: severityRawField.hasField,
             status,
             criticality: row?.criticality || row?.normalized_criticality || "Unmapped",
+            description: getMrDescription(row) || getMrTrackingText(row, MR_REMARKS_ALIASES, "Data not available"),
             startedBy: getMrStartedBy(row),
             createdBy: getMrCreatedBy(row),
             assignedTo: getMrStartedBy(row) !== "--" ? getMrStartedBy(row) : getMrTrackingText(row, MR_ASSIGNED_ALIASES, "Data not available"),
@@ -2142,7 +2150,7 @@ function renderMrOutstandingTable(model) {
             <td>${escapeHtml(item.assetId)}</td>
             <td>${escapeHtml(item.raised.date ? fmtDateOnly(item.raised.date) : "Invalid Date")}</td>
             <td>${escapeHtml(formatMrSeverityCode(item.severity, item.row))}</td>
-            <td>${escapeHtml(getMrAcknowledgementDisplay(item, model.hasAckTracking))}</td>
+            <td class="description-cell" title="${escapeHtml(item.description || "")}">${escapeHtml(item.description || "Data not available")}</td>
             <td>${escapeHtml(getMrAckDaysText(item))}</td>
             <td>${escapeHtml(item.status || "Data not available")}</td>
             <td>${escapeHtml(item.startedBy)}</td>
@@ -3617,11 +3625,16 @@ const PM_CM_PREVENTIVE_PATTERNS = [
     { pattern: /\bscheduled\b|\bschedule\b/i, label: "scheduled" },
     { pattern: /\broutine\b|\bperiodic\b/i, label: "routine / periodic" },
     { pattern: /\bpm\b|\bp\.m\.\b/i, label: "PM" },
-    { pattern: /\binspect(?:ion)?\b|\bcheck(?:ing|list)?\b/i, label: "inspection / check" },
+    { pattern: /\binspect(?:ion|ing)?\b|\bcheck\s*list\b|\bchecklist\b/i, label: "inspection" },
     { pattern: /\blubricat(?:e|ion)?\b|\bgreas(?:e|ing)?\b/i, label: "lubrication" },
     { pattern: /\bcalibrat(?:e|ion)?\b/i, label: "calibration" },
     { pattern: /\bclean(?:ing)?\b/i, label: "cleaning" },
     { pattern: /\bweekly\b|\bmonthly\b|\bquarterly\b|\bannual(?:ly)?\b/i, label: "frequency wording" },
+];
+const PM_CM_PREVENTIVE_REVIEW_PATTERNS = [
+    { pattern: /\bpm\b|\bp\.m\.\b|\bprevent(?:ive|ative)\s+maintenance\b|\bplanned\s+maintenance\b/i, label: "PM wording" },
+    { pattern: /\binspect(?:ion|ing)?\b|\bcheck\s*list\b|\bchecklist\b/i, label: "inspection" },
+    { pattern: /\bclean(?:ing)?\b|\bsanitiz(?:e|ing|ation)\b/i, label: "cleaning" },
 ];
 const PM_CM_CORRECTIVE_PATTERNS = [
     { pattern: /\bcorrective\b|\bcm\b/i, label: "corrective" },
@@ -3757,11 +3770,6 @@ function getPreventiveCorrectiveNarrativeText(row = {}) {
         row?.notes,
         row?.problem,
         row?.details,
-        // Include MR/WO identifiers so PM-prefixed numbers (e.g. "PM-00001") are flagged
-        row?.work_order_id,
-        row?.maintenance_order_id,
-        row?.mr_number,
-        row?.mr_no,
     ].map(cleanMrValue).filter(Boolean).join(" | ");
 }
 
@@ -3770,10 +3778,10 @@ function classifyPreventiveCorrectiveRow(row, index) {
     const narrativeText = getPreventiveCorrectiveNarrativeText(row);
     const typePreventiveMatches = matchPmCmPatterns(typeText, PM_CM_PREVENTIVE_PATTERNS);
     const typeCorrectiveMatches = matchPmCmPatterns(typeText, PM_CM_CORRECTIVE_PATTERNS);
-    const narrativePreventiveMatches = matchPmCmPatterns(narrativeText, PM_CM_PREVENTIVE_PATTERNS);
+    const narrativePreventiveMatches = matchPmCmPatterns(narrativeText, PM_CM_PREVENTIVE_REVIEW_PATTERNS);
     const loggedType = typePreventiveMatches.length ? "preventive" : "corrective";
     const originalType = loggedType === "preventive" ? "Preventive" : "Corrective";
-    const reviewMatches = originalType === "Corrective" ? [...new Set([...typePreventiveMatches, ...narrativePreventiveMatches])] : [];
+    const reviewMatches = originalType === "Corrective" ? [...new Set(narrativePreventiveMatches)] : [];
     const id = getPreventiveCorrectiveReviewKey(row, index);
     const savedDecision = getPreventiveCorrectiveReviewDecision(id);
     const reviewDecision = savedDecision?.reviewDecision || "";
@@ -5973,7 +5981,7 @@ function renderBadgeCell(kind, value) {
     const text = String(value || "--");
     const normalized = normalizeClassification(text);
     if (kind === "status") {
-        const level = normalized === "finished" ? "ok" : (normalized === "new" ? "requires_attention" : (normalized === "in progress" || normalized === "inprogress" ? "warning" : "offline"));
+        const level = normalized === "finished" ? "ok" : (normalized === "new" ? "requires_attention" : (isMrInProgressStatus(normalized) ? "warning" : "offline"));
         return buildStatusPill(level, text);
     }
     if (kind === "criticality") {
@@ -6782,7 +6790,7 @@ function exportMachineExplorerData() {
     const statusStyle = (s) => {
         const n = normalizeClassification(s);
         if (n === "finished") return mk("D1FAE5", "065F46", true);
-        if (n === "in progress" || n === "inprogress") return mk("FEF3C7", "92400E", true);
+        if (isMrInProgressStatus(n)) return mk("FEF3C7", "92400E", true);
         if (n === "new") return mk("FEE2E2", "991B1B", true);
         return mk("F1F5F9", "475569");
     };
@@ -9997,8 +10005,7 @@ function renderCurrentDowntimeKpi() {
     }
 
     const inProgressWos = (openWorkOrdersData || []).filter((wo) => {
-        const state = normalizeClassification(wo.request_state || wo.status);
-        return state === "in progress" || state === "inprogress";
+        return isMrInProgressStatus(wo.request_state || wo.status);
     });
     const machineSet = new Set();
     inProgressWos.forEach((wo) => {
@@ -10009,7 +10016,7 @@ function renderCurrentDowntimeKpi() {
     const inProgressCount = inProgressWos.length;
     const openCount = (openWorkOrdersData || []).length;
     setText("kpi-maintenance-resolution-time", fmtNumber(inProgressCount));
-    setText("kpi-maintenance-resolution-sub", "Current downtime shown as work orders with status In progress.");
+    setText("kpi-maintenance-resolution-sub", "Current downtime shown as open work orders with status In progress, Confirm, or reWork.");
     setText("kpi-maintenance-resolution-count", `${fmtNumber(inProgressCount)} in-progress work order${inProgressCount === 1 ? "" : "s"}`);
     setText("kpi-work-order-count", fmtNumber(openCount));
     setText("kpi-work-order-count-sub", fmtNumber(machineSet.size));

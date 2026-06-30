@@ -140,7 +140,7 @@ def _is_mtbf_eligible_status(value):
 
 def _is_open_work_order_status(value):
     normalized = _normalize_status(value)
-    return normalized in {"new", "in progress", "inprogress"}
+    return normalized in {"new", "in progress", "inprogress", "confirm", "rework", "re work"}
 
 
 def _infer_criticality(asset_id, machine_name, location, job_trade, description):

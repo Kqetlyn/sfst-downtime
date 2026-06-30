@@ -5380,9 +5380,9 @@ def _asset_intel_public_flag(flags: list[str]) -> str:
 
 def _asset_intel_status_group(status: str) -> str:
     text = normalize_spare_part_text(status)
-    if any(token in text for token in ("finish", "finished", "confirm", "confirmed", "complete", "completed", "closed", "ended")):
+    if any(token in text for token in ("finish", "finished", "confirmed", "complete", "completed", "closed", "ended")):
         return "finished"
-    if any(token in text for token in ("open", "progress", "started", "pending", "created", "active", "scheduled")):
+    if any(token in text for token in ("open", "progress", "confirm", "started", "pending", "created", "active", "scheduled")):
         return "open"
     return "other"
 

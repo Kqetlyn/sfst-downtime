@@ -816,6 +816,14 @@ html.downtime-embed .dashboard-content {
     background: var(--card);
 }
 
+.mr-outstanding-table-wrapper .description-cell {
+    max-width: 360px;
+    min-width: 260px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .mr-row-badges {
     display: flex;
     flex-wrap: wrap;

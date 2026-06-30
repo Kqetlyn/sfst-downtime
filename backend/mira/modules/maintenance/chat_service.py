@@ -986,7 +986,7 @@ def buildMrTrackingContext(filters: dict, definition: dict) -> dict:
     open_records = kpi.get_open_mr_records(filters, limit=10)
     top_assets = kpi.get_top_assets_by_mr_count(filters, limit=5)
     ack_counts = Counter(str(row.get("acknowledgement_status") or "Unknown").strip() or "Unknown" for row in rows)
-    open_rows = [row for row in rows if str(row.get("status_category") or "").lower() == "open" or str(row.get("request_state") or "").lower().replace(" ", "") in {"new", "inprogress"}]
+    open_rows = [row for row in rows if str(row.get("status_category") or "").lower() == "open" or str(row.get("request_state") or "").lower().replace(" ", "") in {"new", "inprogress", "confirm", "rework"}]
     oldest_open_days = None
     if open_rows:
         raised_dates = [_parse_dt(row.get("request_created_time") or row.get("start_time")) for row in open_rows]
@@ -1284,7 +1284,7 @@ def buildCriticalMachineActivityContext(filters: dict, definition: dict) -> dict
         row for row in rows
         if _is_existing_critical_asset(row)
     ]
-    open_critical = [row for row in critical_rows if str(row.get("status_category") or "").lower() == "open" or str(row.get("request_state") or "").lower().replace(" ", "") in {"new", "inprogress"}]
+    open_critical = [row for row in critical_rows if str(row.get("status_category") or "").lower() == "open" or str(row.get("request_state") or "").lower().replace(" ", "") in {"new", "inprogress", "confirm", "rework"}]
     repeated = _top_counter(critical_rows, ("asset_display_name", "mapped_asset_name", "machine_name", "asset_name"), limit=5)
     downtime_hours = round(sum(float(row.get("duration_hours") or 0) for row in critical_rows if _safe_float(row.get("duration_hours")) is not None), 2)
     context = _kpi_context_base(definition, filters, record_count=len(critical_rows), rows_after_filter=len(critical_rows), source="downtime rows enriched by existing asset criticality list")

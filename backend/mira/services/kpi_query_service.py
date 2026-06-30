@@ -229,8 +229,8 @@ def _filtered_work_order_rows(filters: dict) -> list[dict]:
     ]
 
 
-_MR_OPEN_STATUSES = {"new", "in progress", "open", "ongoing"}
-_MR_CLOSED_STATUSES = {"finished", "closed", "confirmed", "confirm", "completed", "complete", "resolved", "done"}
+_MR_OPEN_STATUSES = {"new", "in progress", "open", "ongoing", "confirm", "rework", "re work"}
+_MR_CLOSED_STATUSES = {"finished", "closed", "confirmed", "completed", "complete", "resolved", "done"}
 _MR_REJECTED_STATUSES = {"rejected", "reject", "cancelled", "canceled"}
 _SEVERITY_ORDER = {"S1": 1, "S2": 2, "S3": 3, "S4": 4}
 

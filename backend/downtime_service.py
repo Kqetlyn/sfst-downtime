@@ -46,7 +46,7 @@ _DOWNTIME_CACHE = {}
 _WO_LOAD_CACHE = {"sig": None, "payload": None}
 # Keyed by normalised stage string; cleared by import_work_order_file().
 _SQL_WO_CACHE: dict = {}
-DOWNTIME_CACHE_VERSION = "2026-06-18-stage-text-detection"
+DOWNTIME_CACHE_VERSION = "2026-06-30-asset-master-functional-location"
 DOWNTIME_EXPORT_YEAR = 2026
 
 PRIMARY_WORK_ORDER_DOWNTIME_FILE = os.path.join(DATA_DIR, "data downtime.csv")
@@ -176,7 +176,10 @@ def _sql_row_to_enriched(row: dict) -> dict:
     am_criticality = row.get("am_criticality")
     am_is_critical = row.get("am_is_critical")
     am_area        = str(row.get("am_area") or "").strip()
-    has_am_match   = am_criticality is not None
+    am_category    = str(row.get("am_category") or "").strip()
+    am_machine_group = str(row.get("am_machine_group") or "").strip()
+    am_match_source = str(row.get("am_match_source") or "").strip()
+    has_am_match   = bool(am_match_source or am_criticality or am_category)
 
     # Criticality
     if has_am_match and am_criticality:
@@ -187,14 +190,24 @@ def _sql_row_to_enriched(row: dict) -> dict:
     is_critical_flag = bool(am_is_critical) if am_is_critical is not None else (criticality == CRITICALITY_CRITICAL)
     crit_rank = CRITICALITY_RANK.get(criticality, CRITICALITY_RANK.get("Unmapped", 2))
 
-    location = am_area or "Unassigned"
+    location = am_area or func_loc or "Unassigned"
 
     # Status flags
     status_lower = status.lower()
-    is_open     = status_lower in {"new", "in progress", "inprogress"}
+    is_open     = status_lower in {"new", "in progress", "inprogress", "confirm", "rework", "re work"}
     is_finished = status_lower in {"finished", "completed", "closed", "resolved", "done"}
 
-    is_valid = dq_status == "Valid"
+    if dq_status == "Valid":
+        dq_flags = ["Valid"]
+    elif review_reason:
+        dq_flags = [r.strip() for r in review_reason.split(";") if r.strip()]
+    else:
+        dq_flags = [dq_status or "Review"]
+    if is_open:
+        dq_flags = [flag for flag in dq_flags if flag != "Review status"]
+    if not dq_flags:
+        dq_flags = ["Valid"]
+    is_valid = dq_flags == ["Valid"]
 
     # Datetime parsing
     actual_start_dt = _parse_iso_simple(actual_start_iso)
@@ -236,19 +249,11 @@ def _sql_row_to_enriched(row: dict) -> dict:
     mapping_status = "Mapped" if has_am_match else "Unmapped"
     mapping_source = "Asset_Master.xlsx" if has_am_match else "fallback"
 
-    # Data quality flags list
-    if is_valid:
-        dq_flags = ["Valid"]
-    elif review_reason:
-        dq_flags = [r.strip() for r in review_reason.split(";") if r.strip()]
-    else:
-        dq_flags = [dq_status or "Review"]
-
     # Acknowledgement
     if is_finished and wo_number:
         ack_status = "Acknowledged"
     elif is_open:
-        ack_status = "Pending"
+        ack_status = "Acknowledged / In Progress" if wo_number and not is_new_lifecycle(status) else "Pending"
     else:
         ack_status = ""
 
@@ -288,12 +293,16 @@ def _sql_row_to_enriched(row: dict) -> dict:
         "equipment_category": category,
         "mappedMainAssetGroup": category,
         "mapped_main_asset_group": category,
+        "mappedMachineGroup": am_machine_group,
+        "asset_machine_group": am_machine_group,
         "mappedSubAssetGroup": "",
         "mapped_sub_asset_group": "",
         "mappedLocation": location,
         "mapped_location": location,
         "mappedSystemArea": "",
         "mapped_system_area": "",
+        "mappedFunctionalLocation": func_loc,
+        "mapped_functional_location": func_loc,
         "mappedAssetName": asset_name,
         "mapped_asset_name": asset_name,
         # Criticality
@@ -305,6 +314,7 @@ def _sql_row_to_enriched(row: dict) -> dict:
         # Mapping metadata
         "mapping_status": mapping_status,
         "mappingStatus": mapping_status,
+        "mapping_match_source": am_match_source,
         "mapping_source": mapping_source,
         "classification_source": mapping_source,
         "has_assetlist_classification": has_am_match,
@@ -333,7 +343,7 @@ def _sql_row_to_enriched(row: dict) -> dict:
         "duration_context": duration_context,
         "valid_mttr_ttr": is_valid,
         # Data quality
-        "data_quality_flag": dq_status or "Review",
+        "data_quality_flag": dq_flags[0] if len(dq_flags) == 1 else "; ".join(dq_flags),
         "data_quality_flags": dq_flags,
         # Description
         "description": description,
@@ -1099,7 +1109,8 @@ def is_new_lifecycle(value):
 
 
 def is_in_progress_lifecycle(value):
-    return normalize_lifecycle_state(value).replace(" ", "") == "inprogress"
+    normalized = normalize_lifecycle_state(value)
+    return normalized.replace(" ", "") in {"inprogress", "rework"} or normalized == "confirm"
 
 
 def is_finished_lifecycle(value):
@@ -1108,7 +1119,7 @@ def is_finished_lifecycle(value):
 
 def is_review_lifecycle(value):
     normalized = normalize_lifecycle_state(value)
-    return normalized in {"confirm", "rework", "re work", "rejected", "reject"}
+    return normalized in {"rejected", "reject"}
 
 
 def calculate_acknowledgement_status(status, work_order_id):

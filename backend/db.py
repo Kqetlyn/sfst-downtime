@@ -296,16 +296,32 @@ def upsert_asset_master_from_mapping(asset_map: dict, source_file: str = "Asset_
         category      = str(entry.get("mappedMainAssetGroup") or entry.get("machine_group") or "").strip()
         machine_group = str(entry.get("mappedMachineGroup")   or entry.get("asset_machine_group") or "").strip()
 
+        functional_location = str(
+            entry.get("functional_location")
+            or entry.get("mappedFunctionalLocation")
+            or entry.get("location")
+            or entry.get("mappedLocation")
+            or ""
+        ).strip()
+        area = str(
+            entry.get("location")
+            or entry.get("mappedLocation")
+            or entry.get("functional_location_name")
+            or entry.get("mappedFunctionalLocationName")
+            or entry.get("mappedSystemArea")
+            or ""
+        ).strip()
+
         rows.append((
             asset_id,
             str(entry.get("display_name")       or entry.get("mappedAssetName")   or "").strip(),
-            str(entry.get("location")            or entry.get("mappedLocation")    or "").strip(),
+            functional_location,
             str(entry.get("stage")               or entry.get("mappedStage")       or "").strip(),
             category,
             machine_group,
             str(entry.get("criticality") or "").strip(),
             1 if category in _CRITICAL_MACHINE_GROUPS else 0,
-            str(entry.get("mappedSystemArea") or "").strip(),
+            area,
             source_file,
             now,
         ))
@@ -706,9 +722,29 @@ def load_work_orders_from_sql(stage: str | None = None) -> list[dict]:
     Caller is responsible for converting rows to enriched Python dicts
     (see downtime_service._sql_row_to_enriched).
     """
-    # Resolve stage at query time: use asset_master stage as fallback when the
-    # stored stage is 'Unmapped' (happens when asset mapping ran after import).
-    _eff_stage = "COALESCE(NULLIF(wo.stage, 'Unmapped'), am.stage, wo.stage)"
+    # Resolve mapping at query time: exact Asset ID wins; Functional Location is
+    # used only as a grouped fallback so shared locations do not duplicate rows.
+    _am_stage = "COALESCE(am.stage, amfl.stage)"
+    _am_category = "COALESCE(am.category, amfl.category)"
+    _am_machine_group = "COALESCE(am.machine_group, amfl.machine_group)"
+    _am_criticality = "COALESCE(am.criticality, amfl.criticality)"
+    _am_is_critical = "COALESCE(am.is_critical, amfl.is_critical)"
+    _am_area = "COALESCE(am.area, amfl.area)"
+    _eff_stage = (
+        "CASE WHEN wo.stage IS NULL OR TRIM(wo.stage) = '' "
+        "OR wo.stage IN ('Unmapped', 'Needs Stage Review', 'Missing Asset ID') "
+        f"THEN COALESCE({_am_stage}, wo.stage) ELSE wo.stage END"
+    )
+    _eff_category = (
+        f"COALESCE(am.category, CASE WHEN wo.category IS NULL OR TRIM(wo.category) = '' "
+        "OR wo.category IN ('Unclassified', 'Unknown / Review', 'Unmapped') "
+        f"THEN COALESCE(amfl.category, wo.category) ELSE wo.category END)"
+    )
+    _eff_machine_group = (
+        f"COALESCE(am.category, CASE WHEN wo.machine_group IS NULL OR TRIM(wo.machine_group) = '' "
+        "OR wo.machine_group IN ('Unknown / Review', 'Unmapped', 'Unmapped Asset') "
+        f"THEN COALESCE(amfl.category, wo.machine_group) ELSE wo.machine_group END)"
+    )
 
     params: list = []
     where_parts: list[str] = []
@@ -720,22 +756,51 @@ def load_work_orders_from_sql(stage: str | None = None) -> list[dict]:
     where_sql = ("WHERE " + " AND ".join(where_parts)) if where_parts else ""
 
     sql = f"""
+        WITH amfl AS (
+            SELECT
+                UPPER(TRIM(functional_location)) AS functional_location_key,
+                CASE WHEN COUNT(DISTINCT stage) = 1 THEN MAX(stage) END AS stage,
+                CASE WHEN COUNT(DISTINCT category) = 1 THEN MAX(category) END AS category,
+                CASE WHEN COUNT(DISTINCT machine_group) = 1 THEN MAX(machine_group) END AS machine_group,
+                CASE WHEN COUNT(DISTINCT criticality) = 1 THEN MAX(criticality) END AS criticality,
+                MAX(is_critical) AS is_critical,
+                CASE WHEN COUNT(DISTINCT area) = 1 THEN MAX(area) END AS area,
+                CASE WHEN COUNT(*) = 1 THEN MAX(asset_id) END AS asset_id,
+                CASE WHEN COUNT(*) = 1 THEN MAX(asset_name) END AS asset_name,
+                COUNT(*) AS asset_count
+            FROM asset_master
+            WHERE functional_location IS NOT NULL AND TRIM(functional_location) <> ''
+            GROUP BY UPPER(TRIM(functional_location))
+        )
         SELECT
-            wo.mr_number, wo.wo_number, wo.asset_id, wo.asset_name,
+            wo.mr_number, wo.wo_number,
+            COALESCE(am.asset_id, amfl.asset_id, wo.asset_id) AS asset_id,
+            COALESCE(am.asset_name, amfl.asset_name, wo.asset_name) AS asset_name,
             wo.functional_location,
             {_eff_stage} AS stage,
-            wo.category, wo.machine_group,
+            {_eff_category} AS category,
+            {_eff_machine_group} AS machine_group,
             wo.severity, wo.status, wo.description, wo.translated_description,
             wo.job_type, wo.trade,
             wo.actual_start, wo.actual_end, wo.created_date,
             wo.source_file, wo.data_validity_status, wo.review_reason,
             wo.started_by, wo.created_by,
             wo.updated_at,
-            am.criticality  AS am_criticality,
-            am.is_critical  AS am_is_critical,
-            am.area         AS am_area
+            {_am_criticality} AS am_criticality,
+            {_am_is_critical} AS am_is_critical,
+            {_am_area} AS am_area,
+            {_am_category} AS am_category,
+            {_am_machine_group} AS am_machine_group,
+            CASE
+                WHEN am.asset_id IS NOT NULL THEN 'asset_id'
+                WHEN amfl.functional_location_key IS NOT NULL THEN 'functional_location'
+                ELSE ''
+            END AS am_match_source,
+            COALESCE(am.asset_id, amfl.asset_id) AS am_asset_id
         FROM work_orders wo
-        LEFT JOIN asset_master am ON am.asset_id = wo.asset_id
+        LEFT JOIN asset_master am ON UPPER(TRIM(am.asset_id)) = UPPER(TRIM(wo.asset_id))
+        LEFT JOIN amfl ON am.asset_id IS NULL
+            AND UPPER(TRIM(wo.functional_location)) = amfl.functional_location_key
         {where_sql}
         ORDER BY wo.created_date DESC
     """

@@ -151,6 +151,7 @@ def load_asset_mapping(data_dir):
         "path": str(path or (Path(data_dir) / ASSET_MASTER_RELATIVE_PATH)),
         "last_synced": None,
         "asset_map": {},
+        "functional_location_map": {},
         "keyword_rules": [],
         "groups": [],
         "group_matchers": [],
@@ -174,6 +175,7 @@ def load_asset_mapping(data_dir):
     # ── Parse Asset Mapping ───────────────────────────────────────────────────
     ws = wb[ASSET_MAPPING_SHEET]
     asset_map = {}
+    functional_location_entries = {}
     groups = []
     group_matchers = []
 
@@ -207,6 +209,8 @@ def load_asset_mapping(data_dir):
         sub_asset_group = _clean(cell(row, "Sub Asset Group", fallback_index=5), "")
         location = _clean(cell(row, "Location", fallback_index=5), "Unassigned")
         system_area = _clean(cell(row, "System/Area", "System Area", fallback_index=6), "")
+        functional_location = _clean(cell(row, "Functional Location", "Functional Location Code"), "")
+        functional_location_name = _clean(cell(row, "Functional Location Name"), "")
         remarks = _clean(cell(row, "Remarks", fallback_index=7), "")
 
         raw_criticality = ""
@@ -240,6 +244,10 @@ def load_asset_mapping(data_dir):
             "mappedSubAssetGroup": sub_asset_group,
             "mappedLocation": location,
             "mappedSystemArea": system_area,
+            "functional_location": functional_location,
+            "functional_location_name": functional_location_name,
+            "mappedFunctionalLocation": functional_location,
+            "mappedFunctionalLocationName": functional_location_name,
             "mappingStatus": mapping_status,
             "mapped_stage": stage,
             "mapped_asset_name": display_name,
@@ -247,6 +255,8 @@ def load_asset_mapping(data_dir):
             "mapped_sub_asset_group": sub_asset_group,
             "mapped_location": location,
             "mapped_system_area": system_area,
+            "mapped_functional_location": functional_location,
+            "mapped_functional_location_name": functional_location_name,
             "mapping_status": mapping_status,
             "remarks": remarks,
             "criticality": criticality,
@@ -267,6 +277,8 @@ def load_asset_mapping(data_dir):
             "group_asset_ids": [],
         }
         asset_map[asset_id] = entry
+        if functional_location:
+            functional_location_entries.setdefault(_normalize_machine_name(functional_location), []).append(entry)
 
         machine_name_lc = _normalize_machine_name(machine_group)
         group_key = machine_group
@@ -323,6 +335,10 @@ def load_asset_mapping(data_dir):
             "mappedSubAssetGroup": sub_asset_group,
             "mappedLocation": location,
             "mappedSystemArea": system_area,
+            "functional_location": functional_location,
+            "functional_location_name": functional_location_name,
+            "mappedFunctionalLocation": functional_location,
+            "mappedFunctionalLocationName": functional_location_name,
             "mappingStatus": mapping_status,
         })
 
@@ -360,6 +376,11 @@ def load_asset_mapping(data_dir):
         "last_synced": datetime.fromtimestamp(os.path.getmtime(path)).isoformat(),
         "asset_map": asset_map,
         "keyword_rules": keyword_rules,
+        "functional_location_map": {
+            key: entries[0]
+            for key, entries in functional_location_entries.items()
+            if key and len(entries) == 1
+        },
         "groups": groups,
         "group_matchers": sorted(
             group_matchers,
@@ -430,9 +451,17 @@ def classify_work_order(record, mapping):
     machine_name_display, asset_label, asset_display_name, location, building.
     """
     asset_map = mapping.get("asset_map", {})
+    functional_location_map = mapping.get("functional_location_map", {})
     keyword_rules = mapping.get("keyword_rules", [])
 
     raw_id = str(record.get("asset_id") or record.get("machine_code") or "").strip().upper()
+    raw_functional_location = _clean(
+        record.get("raw_functional_location")
+        or record.get("functional_location")
+        or record.get("mappedFunctionalLocation")
+        or record.get("mapped_functional_location")
+        or ""
+    )
 
     # Step A — direct match
     hit = asset_map.get(raw_id)
@@ -449,6 +478,10 @@ def classify_work_order(record, mapping):
             "raw_functional_location", "area", "location",
         )
     ).lower()
+
+    location_hit = functional_location_map.get(_normalize_machine_name(raw_functional_location))
+    if location_hit:
+        return dict(location_hit)
 
     for rule in keyword_rules:
         if rule["keyword"] in searchable:

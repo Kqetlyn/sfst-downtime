@@ -279,7 +279,7 @@ def get_cached_asset_profiles(mapping, signature):
                 "asset_id": entry.get("asset_id"),
                 "name": entry.get("mappedAssetName") or entry.get("asset_display_name"),
                 "machine_group": entry.get("mappedMainAssetGroup") or group.get("machine_group"),
-                "functional_location": entry.get("mappedLocation") or entry.get("mappedSystemArea") or group.get("location"),
+                "functional_location": entry.get("mappedFunctionalLocation") or entry.get("functional_location") or entry.get("mappedLocation") or entry.get("mappedSystemArea") or group.get("location"),
             })
     full = asset_resolver.build_all_asset_profiles(inputs)
     profiles = {aid: _slim_profile(p) for aid, p in full.items()}
@@ -307,6 +307,8 @@ def asset_list_api():
                     "mappedSubAssetGroup": e.get("mappedSubAssetGroup"),
                     "mappedLocation": e.get("mappedLocation") or group.get("mappedLocation"),
                     "mappedSystemArea": e.get("mappedSystemArea"),
+                    "mappedFunctionalLocation": e.get("mappedFunctionalLocation") or e.get("functional_location"),
+                    "mappedFunctionalLocationName": e.get("mappedFunctionalLocationName") or e.get("functional_location_name"),
                     "mappingStatus": e.get("mappingStatus"),
                 }
                 for e in group.get("asset_entries", [])
@@ -320,6 +322,8 @@ def asset_list_api():
                 "mappedSubAssetGroup": group.get("mappedSubAssetGroup"),
                 "mappedLocation": group.get("mappedLocation") or group["location"],
                 "mappedSystemArea": group.get("mappedSystemArea"),
+                "mappedFunctionalLocation": group.get("mappedFunctionalLocation") or group.get("functional_location"),
+                "mappedFunctionalLocationName": group.get("mappedFunctionalLocationName") or group.get("functional_location_name"),
                 "mappingStatus": group.get("mappingStatus"),
                 "asset_count": len(assets),
                 "assets": assets,
@@ -435,7 +439,12 @@ def _start_cache_warming():
 
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5005))
+    port = int(os.environ.get("PORT", 5006))
+    if port == 5005:
+        raise SystemExit(
+            "ERROR: PORT=5005 conflicts with the main Maintenance app.\n"
+            "The standalone Downtime app runs on 5006. Unset PORT or set PORT=5006."
+        )
     debug = os.environ.get("FLASK_DEBUG", "0") not in {"0", "false", "no"}
     if not os.environ.get("WERKZEUG_RUN_MAIN"):
         _free_port(port)
